@@ -127,7 +127,7 @@ def main():
     # start_background_rssi(radio, interval=5)
     start_irq_polling(radio)
 
-
+    radio.setSyncWord(LORA_SYNC_WORD_PUBLIC)
 
     # Frequency
     radio.setFrequency(FREQUENCY_HZ)
