@@ -94,6 +94,8 @@ def on_rx():
 
     elif status == lora.STATUS_RX_TIMEOUT:
         print("RX timeout (unexpected in continuous mode)")
+    else:
+        print("Nada")
 
 
 def main():
