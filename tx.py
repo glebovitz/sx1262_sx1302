@@ -1,66 +1,122 @@
 #!/usr/bin/env python3
 import time
-from sx1262 import SX1262
-from sx1262_constants import *
 
-FREQ = 868_300_000
+from sx1262_constants import *
+from sx1262 import SX1262 as SX126x  # adjust if needed
+
+# ------------------------------------------------------------
+# Pin mapping (BCM)
+# ------------------------------------------------------------
+BUSY_PIN = 20
+RESET_PIN = 18
+NSS_PIN = 21
+SPI_BUS = 0
+SPI_DEV = 0
+
+# ------------------------------------------------------------
+# Radio parameters
+# ------------------------------------------------------------
+FREQUENCY_HZ = 910_525_000
+BANDWIDTH_HZ = 62_500
+SPREADING_FACTOR = 7
+CODING_RATE = 5
+PREAMBLE_LENGTH = 12
+PAYLOAD_LENGTH = 32
+CRC_ENABLED = True
+INVERT_IQ = False
+
+
+# ------------------------------------------------------------
+# Event Handlers
+# ------------------------------------------------------------
+
+async def handle_tx_done(transmit_time=None, irq_status=None):
+    print("\n--- TX COMPLETE ---")
+    print(f"Transmit time: {transmit_time*1000:.2f} ms")
+    print("-------------------")
+
+
+async def handle_timeout(irq_status=None):
+    print("TX timeout")
+
+
+# ------------------------------------------------------------
+# Main
+# ------------------------------------------------------------
 
 def main():
-    radio = SX1262()
+    global radio
 
-    # begin(bus, cs, reset, busy, irq, txen, rxen, wake)
+    print("Initializing SX1262…")
+    radio = SX126x()
+
     ok = radio.begin(
-        bus=0,
-        cs=0,
-        reset=18,
-        busy=20,
-        irq=16,
-        txen=6,
+        bus=SPI_BUS,
+        cs=SPI_DEV,
+        reset=RESET_PIN,
+        busy=BUSY_PIN,
+        irq=-1,
+        txen=-1,
         rxen=-1,
-        wake=-1
-    )
-    assert ok, "Failed to initialize SX1262"
-
-    # RF switch on DIO2
-    radio.set_dio2_rf_switch(True)
-
-    # Frequency
-    radio.set_frequency(FREQ)
-
-    # TX power (5 dBm here)
-    radio.set_tx_power(5, TX_POWER_SX1262)
-
-    # LoRa modulation: SF7, BW 125 kHz, CR 4/5
-    radio.set_lora_modulation(
-        sf=7,
-        bw=125_000,
-        cr=5
+        wake=-1,
     )
 
-    # LoRa packet: explicit header, preamble=12, payload=255, CRC on
-    radio.set_lora_packet(
-        header_type=HEADER_EXPLICIT,
-        preamble_length=12,
-        payload_length=255,
-        crc_type=True
-    )
+    if not ok:
+        raise RuntimeError("SX1262 failed to enter STDBY_RC. Check wiring.")
 
-    # Sync word (public network)
+    print("Configuring radio…")
+
+    # Sync word
     radio.set_sync_word(LORA_SYNC_WORD_PUBLIC)
 
-    i = 0
-    while True:
-        payload = f"HeLoRa {i}".encode()
+    # Frequency
+    radio.set_frequency(FREQUENCY_HZ)
 
-        radio.begin_packet()
-        radio.put(payload)
-        radio.end_packet(5000)
-        radio.wait()
+    # LoRa modulation
+    radio.set_lora_modulation(
+        sf=SPREADING_FACTOR,
+        bw=BANDWIDTH_HZ,
+        cr=CODING_RATE,
+        ldro=False,
+    )
 
-        print("TX:", payload)
+    # Packet parameters
+    radio.set_lora_packet(
+        header_type=HEADER_EXPLICIT,
+        preamble_length=PREAMBLE_LENGTH,
+        payload_length=PAYLOAD_LENGTH,
+        crc_type=CRC_ENABLED,
+        invert_iq=INVERT_IQ,
+    )
 
-        i += 1
-        time.sleep(1.5)
+    # --------------------------------------------------------
+    # Register event handlers
+    # --------------------------------------------------------
+    radio.on("tx_done", handle_tx_done)
+    radio.on("timeout", handle_timeout)
+
+    print("Transmitting packet…")
+
+    # --------------------------------------------------------
+    # Build and send a packet
+    # --------------------------------------------------------
+    radio.begin_packet()
+
+    payload = b"Hello from SX1262!"
+    radio.put(payload)
+
+    ok = radio.end_packet(TX_SINGLE)
+    if not ok:
+        raise RuntimeError("Failed to start TX")
+
+    print("Packet sent, waiting for TX_DONE event…")
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("Shutting down…")
+        radio.end()
 
 
 if __name__ == "__main__":

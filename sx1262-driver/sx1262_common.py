@@ -1,4 +1,5 @@
 import time
+import threading
 
 from sx1262_constants import *
 import lgpio
@@ -29,9 +30,16 @@ class SX1262Common:
 
         self.set_packet_type(LORA_MODEM)
         self._fix_resistance_antenna()
+
+        # Start internal IRQ polling loop (event-driven interface)
+        self._start_recv_loop()
+
         return True
 
     def end(self):
+        # Stop internal IRQ loop before shutting down hardware
+        self._stop_recv_loop()
+
         self.sleep(SLEEP_COLD_START)
         self.spi.close()
         # close gpio chip handle
@@ -81,3 +89,42 @@ class SX1262Common:
         if status is None:
             return 0
         return status & 0x70
+
+    # -------------------------------------------------------------------------
+    # Internal IRQ polling loop -> emits events via SX1262Interrupt._handle_irq
+    # -------------------------------------------------------------------------
+
+    def _start_recv_loop(self, interval: float = 0.01):
+        """
+        Start a background thread that polls get_irq_status() and dispatches
+        events via _handle_irq(). Safe to call multiple times.
+        """
+        if getattr(self, "_recv_thread", None) and getattr(
+            self, "_recv_running", False
+        ):
+            return
+
+        self._recv_interval = interval
+        self._recv_running = True
+
+        def loop():
+            while self._recv_running:
+                irq = self.get_irq_status()
+                if irq:
+                    # Let SX1262Interrupt decode and emit events
+                    self._handle_irq(irq)
+                time.sleep(self._recv_interval)
+
+        self._recv_thread = threading.Thread(target=loop, daemon=True)
+        self._recv_thread.start()
+
+    def _stop_recv_loop(self):
+        """
+        Stop the background IRQ polling loop.
+        """
+        if not getattr(self, "_recv_running", False):
+            return
+
+        self._recv_running = False
+        # Thread is daemon=True; we don't strictly need to join here.
+        self._recv_thread = None

@@ -38,6 +38,6 @@ class SX1262Vars:
         self._status_irq = STATUS_IRQ
         self._transmit_time = TRANSMIT_TIME
 
-        # callback functions
-        self._on_transmit = ON_TRANSMIT
-        self._on_receive = ON_RECEIVE
+        # NOTE:
+        # Legacy callback slots (_on_transmit, _on_receive) are no longer used.
+        # Event delivery is handled via EventEmitter (self.on/emit).

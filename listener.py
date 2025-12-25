@@ -1,115 +1,69 @@
 #!/usr/bin/env python3
-import threading
 import time
 
 from sx1262_constants import *
-from sx1262 import SX1262 as SX126x  # adjust if your driver file has a different name
+from sx1262 import SX1262 as SX126x  # adjust if needed
 
 # ------------------------------------------------------------
-# Pin mapping (BCM) — confirmed by your continuity testing
+# Pin mapping (BCM)
 # ------------------------------------------------------------
-BUSY_PIN = 20    # Physical Pin 38
-IRQ_PIN = 16     # Physical Pin 36 (DIO1)  (unused here; we poll IRQ status)
-RESET_PIN = 18   # Physical Pin 12
-NSS_PIN = 21     # Physical Pin 40 (manual CS, mapped as CS_DEFINE in constants)
+BUSY_PIN = 20
+IRQ_PIN = 16     # unused (driver uses internal polling)
+RESET_PIN = 18
+NSS_PIN = 21
 SPI_BUS = 0
 SPI_DEV = 0
 
 # ------------------------------------------------------------
 # Radio parameters
 # ------------------------------------------------------------
-FREQUENCY_HZ = 910_525_000   # 910.525 MHz
-BANDWIDTH_HZ = 62_500        # 62.5 kHz
+FREQUENCY_HZ = 910_525_000
+BANDWIDTH_HZ = 62_500
 SPREADING_FACTOR = 7
-CODING_RATE = 5              # 4/5
+CODING_RATE = 5
 PREAMBLE_LENGTH = 12
 PAYLOAD_LENGTH = 32
 CRC_ENABLED = True
 INVERT_IQ = False
 
 
-def start_background_rssi(driver, interval=5):
-    """
-    driver.rssi_inst() returns instantaneous RSSI in dBm.
-    Runs forever in a daemon thread.
-    """
+# ------------------------------------------------------------
+# Event Handlers
+# ------------------------------------------------------------
 
-    def loop():
-        while True:
-            try:
-                rssi = driver.rssi_inst()
-                print("RSSI:", rssi)
+async def handle_rx_done(payload_length=None, buffer_index=None, irq_status=None):
+    data = radio.get(payload_length)
+    rssi = radio.packet_rssi()
+    snr = radio.snr()
 
-                # Flush the SPI bus / status
-                mode = driver.get_mode()
-                print("Raw mode bits from GET_STATUS:", hex(mode) if mode is not None else "None")
-
-            except Exception as e:
-                print("RSSI monitor error:", e)
-            time.sleep(interval)
-
-    t = threading.Thread(target=loop, daemon=True)
-    t.start()
+    print("\n--- PACKET RECEIVED ---")
+    print(f"Bytes: {payload_length}")
+    print(f"Data:  {data.hex(' ')}")
+    print(f"RSSI:  {rssi:.1f} dBm")
+    print(f"SNR:   {snr:.1f} dB")
+    print("------------------------")
 
 
-def start_irq_polling(driver, interval=0.01):
-    """
-    Poll the IRQ status register and, if non-zero, invoke
-    the driver's internal RX interrupt handler.
-    """
-
-    def loop():
-        while True:
-            irq = driver.get_irq_status()
-            if irq:
-                # Let the driver decode the IRQ and call on_rx()
-                driver._interrupt_rx(None)
-            time.sleep(interval)
-
-    t = threading.Thread(target=loop, daemon=True)
-    t.start()
+async def handle_crc_error(irq_status=None):
+    print("CRC error")
 
 
-def on_rx():
-    """
-    RX callback invoked by the driver when a packet is received.
-    """
-    status = radio.status()
+async def handle_header_error(irq_status=None):
+    print("Header error")
 
-    if status == STATUS_RX_DONE:
-        available = radio.available()
-        data = radio.get(available)
 
-        rssi = radio.packet_rssi()
-        snr = radio.snr()
+async def handle_timeout(irq_status=None):
+    print("RX timeout (unexpected in continuous mode)")
 
-        print("\n--- PACKET RECEIVED ---")
-        print(f"Bytes: {available}")
-        print(f"Data:  {data.hex(' ')}")
-        print(f"RSSI:  {rssi:.1f} dBm")
-        print(f"SNR:   {snr:.1f} dB")
-        print("------------------------")
 
-    elif status == STATUS_CRC_ERR:
-        print("CRC error")
-
-    elif status == STATUS_HEADER_ERR:
-        print("Header error")
-
-    elif status == STATUS_RX_TIMEOUT:
-        print("RX timeout (unexpected in continuous mode)")
-    else:
-        print("Nada")
-
-    irq = radio.get_irq_status()
-    radio.clear_irq_status(irq)
-
+# ------------------------------------------------------------
+# Main
+# ------------------------------------------------------------
 
 def main():
     global radio
 
     print("Initializing SX1262…")
-
     radio = SX126x()
 
     ok = radio.begin(
@@ -124,17 +78,11 @@ def main():
     )
 
     if not ok:
-        raise RuntimeError("SX1262 failed to enter STDBY_RC. Check BUSY, RESET, NSS wiring.")
+        raise RuntimeError("SX1262 failed to enter STDBY_RC. Check wiring.")
 
     print("Configuring radio…")
 
-    # Optional: background RSSI monitor
-    # start_background_rssi(radio, interval=5)
-
-    # Poll IRQ status in a background thread instead of GPIO edge callbacks
-    start_irq_polling(radio)
-
-    # Sync word (public network)
+    # Sync word
     radio.set_sync_word(LORA_SYNC_WORD_PUBLIC)
 
     # Frequency
@@ -160,8 +108,13 @@ def main():
     # Optional: boosted gain
     radio.set_rx_gain(RX_GAIN_BOOSTED)
 
-    # Register callback
-    radio.on_receive(on_rx)
+    # --------------------------------------------------------
+    # Register event handlers
+    # --------------------------------------------------------
+    radio.on("rx_done", handle_rx_done)
+    radio.on("crc_error", handle_crc_error)
+    radio.on("header_error", handle_header_error)
+    radio.on("timeout", handle_timeout)
 
     print(f"Starting continuous receive at {FREQUENCY_HZ/1e6:.6f} MHz…")
     print("Waiting for packets…")
