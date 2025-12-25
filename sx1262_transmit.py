@@ -1,75 +1,72 @@
-from base import BaseLoRa
-import spidev
-import RPi.GPIO
 import time
+import lgpio
+
 from sx1262_constants import *
 
+
 class SX1262Transmit:
-### TRANSMIT RELATED METHODS ###
+    # TRANSMIT RELATED METHODS
 
-    def beginPacket(self) :
+    def begin_packet(self):
+        self._payload_tx_rx = 0
+        self.set_buffer_base_address(
+            self._buffer_index, (self._buffer_index + 0xFF) % 0xFF
+        )
 
-        # reset payload length and buffer index
-        self._payloadTxRx = 0
-        self.setBufferBaseAddress(self._bufferIndex, (self._bufferIndex + 0xFF) % 0xFF)
+        if self._txen != -1:
+            self._tx_state = lgpio.gpio_read(self.gpio_chip, self._txen)
+            lgpio.gpio_write(self.gpio_chip, self._txen, 0)
 
-        # save current txen pin state and set txen pin to LOW
-        if self._txen != -1 :
-            self._txState = self.gpio.input(self._txen)
-            self.gpio.output(self._txen, self.gpio.LOW)
-        self._fixLoRaBw500(self._bw)
+        self._fix_lora_bw500(self._bw)
 
-    def endPacket(self, timeout: int = TX_SINGLE) -> bool :
+    def end_packet(self, timeout: int = TX_SINGLE) -> bool:
+        if self.get_mode() == STATUS_MODE_TX:
+            return False
 
-        # skip to enter TX mode when previous TX operation incomplete
-        if self.getMode == STATUS_MODE_TX : return False
+        self._irq_setup(IRQ_TX_DONE | IRQ_TIMEOUT)
 
-        # clear previous interrupt and set TX done, and TX timeout as interrupt source
-        self._irqSetup(IRQ_TX_DONE | IRQ_TIMEOUT)
-        # set packet payload length
-        self.setPacketParamsLoRa(self._preambleLength, self._headerType, self._payloadTxRx, self._crcType, self._invertIq)
+        self.set_packet_params_lora(
+            self._preamble_length,
+            self._header_type,
+            self._payload_tx_rx,
+            self._crc_type,
+            self._invert_iq,
+        )
 
-        # set status to TX wait
-        self._statusWait = STATUS_TX_WAIT
-        self._statusIrq = 0x0000
-        # calculate TX timeout config
-        txTimeout = timeout << 6
-        if txTimeout > 0x00FFFFFF : txTimeout = TX_SINGLE
+        self._status_wait = STATUS_TX_WAIT
+        self._status_irq = 0x0000
 
-        # set device to transmit mode with configured timeout or single operation
-        self.setTx(txTimeout)
-        self._transmitTime = time.time()
+        tx_timeout = timeout << 6
+        if tx_timeout > 0x00FFFFFF:
+            tx_timeout = TX_SINGLE
 
-        # set operation status to wait and attach TX interrupt handler
-        if self._irq != -1 :
-            self.gpio.remove_event_detect(self._irq)
-            self.gpio.add_event_detect(self._irq, self.gpio.RISING, callback=self._interruptTx, bouncetime=10)
+        self.set_tx(tx_timeout)
+        self._transmit_time = time.time()
+
+        # IRQ callback wiring via lgpio alerts could be added here if desired
         return True
 
-    def write(self, data, length: int = 0) :
-
-        # prepare data and data length to be transmitted
-        if type(data) is list or type(data) is tuple :
-            if length == 0 or length > len(data) : length = len(data)
-        elif type(data) is int or type(data) is float :
+    def write(self, data, length: int = 0):
+        if isinstance(data, (list, tuple)):
+            if length == 0 or length > len(data):
+                length = len(data)
+        elif isinstance(data, (int, float)):
             length = 1
             data = (int(data),)
-        else :
+        else:
             raise TypeError("input data must be list, tuple, integer or float")
-        # write data to buffer and update buffer index and payload
-        self.writeBuffer(self._bufferIndex, data, length)
-        self._bufferIndex = (self._bufferIndex + length) % 256
-        self._payloadTxRx += length
 
-    def put(self, data) :
+        self.write_buffer(self._buffer_index, data, length)
+        self._buffer_index = (self._buffer_index + length) % 256
+        self._payload_tx_rx += length
 
-        # prepare bytes or bytearray to be transmitted
-        if type(data) is bytes or type(data) is bytearray :
-            dataList = tuple(data)
-            length = len(dataList)
-        else : raise TypeError("input data must be bytes or bytearray")
-        # write data to buffer and update buffer index and payload
-        self.writeBuffer(self._bufferIndex, dataList, length)
-        self._bufferIndex = (self._bufferIndex + length) % 256
-        self._payloadTxRx += length
-    
+    def put(self, data):
+        if isinstance(data, (bytes, bytearray)):
+            data_list = tuple(data)
+            length = len(data_list)
+        else:
+            raise TypeError("input data must be bytes or bytearray")
+
+        self.write_buffer(self._buffer_index, data_list, length)
+        self._buffer_index = (self._buffer_index + length) % 256
+        self._payload_tx_rx += length

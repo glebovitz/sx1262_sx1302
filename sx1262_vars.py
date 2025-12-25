@@ -1,44 +1,43 @@
-from sx1262_constants import * 
+from sx1262_constants import *
 
-# SX126X register map
+
 class SX1262Vars:
     def __init__(self):
-
         # SPI and GPIO pin setting
-        self._bus = Bus
-        self._cs = Cs
-        self._reset = Reset
-        self._busy = Busy
-        self._cs_define = Cs_define
-        self._irq = Irq
-        self._txen = Txen
-        self._rxen = Rxen
-        self._wake = Wake
-        self._busyTimeout = BusyTimeout
-        self._spiSpeed = SpiSpeed
-        self._txState = TxState
-        self._rxState = RxState
+        self._bus = BUS
+        self._cs = CS
+        self._reset = RESET
+        self._busy = BUSY
+        self._cs_define = CS_DEFINE
+        self._irq = IRQ
+        self._txen = TXEN
+        self._rxen = RXEN
+        self._wake = WAKE
+        self._busy_timeout = BUSY_TIMEOUT
+        self._spi_speed = SPI_SPEED
+        self._tx_state = TX_STATE
+        self._rx_state = RX_STATE
 
         # LoRa setting
-        self._dio = Dio
-        self._modem = Modem
-        self._sf = Sf
-        self._bw = Bw
-        self._cr = Cr
-        self._ldro = Ldro
-        self._headerType = HeaderType
-        self._preambleLength = PreambleLength
-        self._payloadLength = PayloadLength
-        self._crcType = CrcType
-        self._invertIq = InvertIq
+        self._dio = DIO
+        self._modem = MODEM
+        self._sf = SF
+        self._bw = BW
+        self._cr = CR
+        self._ldro = LDRO
+        self._header_type = HEADER_TYPE
+        self._preamble_length = PREAMBLE_LENGTH
+        self._payload_length = PAYLOAD_LENGTH
+        self._crc_type = CRC_TYPE
+        self._invert_iq = INVERT_IQ
 
         # Operation properties
-        self._bufferIndex = BufferIndex
-        self._payloadTxRx = PayloadTxRx
-        self._statusWait = StatusWait
-        self._statusIrq = StatusIrq
-        self._transmitTime = TransmitTime
+        self._buffer_index = BUFFER_INDEX
+        self._payload_tx_rx = PAYLOAD_TX_RX
+        self._status_wait = STATUS_WAIT
+        self._status_irq = STATUS_IRQ
+        self._transmit_time = TRANSMIT_TIME
 
         # callback functions
-        self._onTransmit = OnTransmit
-        self._onReceive = OnReceive
+        self._on_transmit = ON_TRANSMIT
+        self._on_receive = ON_RECEIVE

@@ -1,4 +1,8 @@
-class BaseLoRa :
+class BaseLoRa:
+    """
+    Abstract base class for LoRa drivers.
+    Concrete implementations (e.g., SX1262) must override all methods.
+    """
 
     def begin(self):
         raise NotImplementedError
@@ -9,16 +13,16 @@ class BaseLoRa :
     def reset(self):
         raise NotImplementedError
 
-    def beginPacket(self):
+    def begin_packet(self):
         raise NotImplementedError
 
-    def endPacket(self, timeout: int)-> bool:
+    def end_packet(self, timeout: int) -> bool:
         raise NotImplementedError
 
     def write(self, data, length: int):
         raise NotImplementedError
 
-    def request(self, timeout: int)-> bool:
+    def request(self, timeout: int) -> bool:
         raise NotImplementedError
 
     def available(self):
@@ -27,7 +31,7 @@ class BaseLoRa :
     def read(self, length: int):
         raise NotImplementedError
 
-    def wait(self, timeout: int)-> bool:
+    def wait(self, timeout: int) -> bool:
         raise NotImplementedError
 
     def status(self):

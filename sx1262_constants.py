@@ -1,278 +1,287 @@
-import RPi.GPIO as gpio
-
 # SX126X register map
-REG_FSK_WHITENING_INITIAL_MSB          = 0x06B8
-REG_FSK_CRC_INITIAL_MSB                = 0x06BC
-REG_FSK_SYNC_WORD_0                    = 0x06C0
-REG_FSK_NODE_ADDRESS                   = 0x06CD
-REG_IQ_POLARITY_SETUP                  = 0x0736
-REG_LORA_SYNC_WORD_MSB                 = 0x0740
-REG_TX_MODULATION                      = 0x0889
-REG_RX_GAIN                            = 0x08AC
-REG_TX_CLAMP_CONFIG                    = 0x08D8
-REG_OCP_CONFIGURATION                  = 0x08E7
-REG_RTC_CONTROL                        = 0x0902
-REG_XTA_TRIM                           = 0x0911
-REG_XTB_TRIM                           = 0x0912
-REG_EVENT_MASK                         = 0x0944
+REG_FSK_WHITENING_INITIAL_MSB = 0x06B8
+REG_FSK_CRC_INITIAL_MSB = 0x06BC
+REG_FSK_SYNC_WORD_0 = 0x06C0
+REG_FSK_NODE_ADDRESS = 0x06CD
+REG_IQ_POLARITY_SETUP = 0x0736
+REG_LORA_SYNC_WORD_MSB = 0x0740
+REG_TX_MODULATION = 0x0889
+REG_RX_GAIN = 0x08AC
+REG_TX_CLAMP_CONFIG = 0x08D8
+REG_OCP_CONFIGURATION = 0x08E7
+REG_RTC_CONTROL = 0x0902
+REG_XTA_TRIM = 0x0911
+REG_XTB_TRIM = 0x0912
+REG_EVENT_MASK = 0x0944
 
 # SetSleep
-SLEEP_COLD_START                       = 0x00        # sleep mode: cold start, configuration is lost (default)
-SLEEP_WARM_START                       = 0x04        #             warm start, configuration is retained
-SLEEP_COLD_START_RTC                   = 0x01        #             cold start and wake on RTC timeout
-SLEEP_WARM_START_RTC                   = 0x05        #             warm start and wake on RTC timeout
+SLEEP_COLD_START = 0x00
+SLEEP_WARM_START = 0x04
+SLEEP_COLD_START_RTC = 0x01
+SLEEP_WARM_START_RTC = 0x05
 
 # SetStandby
-STANDBY_RC                             = 0x00        # standby mode: using 13 MHz RC oscillator
-STANDBY_XOSC                           = 0x01        #               using 32 MHz crystal oscillator
+STANDBY_RC = 0x00
+STANDBY_XOSC = 0x01
 
 # SetTx
-TX_SINGLE                              = 0x000000    # Tx timeout duration: no timeout (Rx single mode)
+TX_SINGLE = 0x000000
 
 # SetRx
-RX_SINGLE                              = 0x000000    # Rx timeout duration: no timeout (Rx single mode)
-RX_CONTINUOUS                          = 0xFFFFFF    #                      infinite (Rx continuous mode)
+RX_SINGLE = 0x000000
+RX_CONTINUOUS = 0xFFFFFF
 
 # SetRegulatorMode
-REGULATOR_LDO                          = 0x00        # set regulator mode: LDO (default)
-REGULATOR_DC_DC                        = 0x01        #                     DC-DC
+REGULATOR_LDO = 0x00
+REGULATOR_DC_DC = 0x01
 
 # CalibrateImage
-CAL_IMG_430                            = 0x6B        # ISM band: 430-440 Mhz
-CAL_IMG_440                            = 0x6F
-CAL_IMG_470                            = 0x75        #           470-510 Mhz
-CAL_IMG_510                            = 0x81
-CAL_IMG_779                            = 0xC1        #           779-787 Mhz
-CAL_IMG_787                            = 0xC5
-CAL_IMG_863                            = 0xD7        #           863-870 Mhz
-CAL_IMG_870                            = 0xDB
-CAL_IMG_902                            = 0xE1        #           902-928 Mhz
-CAL_IMG_928                            = 0xE9
+CAL_IMG_430 = 0x6B
+CAL_IMG_440 = 0x6F
+CAL_IMG_470 = 0x75
+CAL_IMG_510 = 0x81
+CAL_IMG_779 = 0xC1
+CAL_IMG_787 = 0xC5
+CAL_IMG_863 = 0xD7
+CAL_IMG_870 = 0xDB
+CAL_IMG_902 = 0xE1
+CAL_IMG_928 = 0xE9
 
 # SetPaConfig
-TX_POWER_SX1261                        = 0x01        # device version for TX power: SX1261
-TX_POWER_SX1262                        = 0x02        #                              SX1262
-TX_POWER_SX1268                        = 0x08        #                              SX1268
+TX_POWER_SX1261 = 0x01
+TX_POWER_SX1262 = 0x02
+TX_POWER_SX1268 = 0x08
 
 # SetRxTxFallbackMode
-FALLBACK_FS                            = 0x40        # after Rx/Tx go to: FS mode
-FALLBACK_STDBY_XOSC                    = 0x30        #                    standby mode with crystal oscillator
-FALLBACK_STDBY_RC                      = 0x20        #                    standby mode with RC oscillator (default)
+FALLBACK_FS = 0x40
+FALLBACK_STDBY_XOSC = 0x30
+FALLBACK_STDBY_RC = 0x20
 
 # SetDioIrqParams
-IRQ_TX_DONE                            = 0x0001      # packet transmission completed
-IRQ_RX_DONE                            = 0x0002      # packet received
-IRQ_PREAMBLE_DETECTED                  = 0x0004      # preamble detected
-IRQ_SYNC_WORD_VALID                    = 0x0008      # valid sync word detected
-IRQ_HEADER_VALID                       = 0x0010      # valid LoRa header received
-IRQ_HEADER_ERR                         = 0x0020      # LoRa header CRC error
-IRQ_CRC_ERR                            = 0x0040      # wrong CRC received
-IRQ_CAD_DONE                           = 0x0080      # channel activity detection finished
-IRQ_CAD_DETECTED                       = 0x0100      # channel activity detected
-IRQ_TIMEOUT                            = 0x0200      # Rx or Tx timeout
-IRQ_ALL                                = 0x03FF      # all interrupts
-IRQ_NONE                               = 0x0000      # no interrupts
+IRQ_TX_DONE = 0x0001
+IRQ_RX_DONE = 0x0002
+IRQ_PREAMBLE_DETECTED = 0x0004
+IRQ_SYNC_WORD_VALID = 0x0008
+IRQ_HEADER_VALID = 0x0010
+IRQ_HEADER_ERR = 0x0020
+IRQ_CRC_ERR = 0x0040
+IRQ_CAD_DONE = 0x0080
+IRQ_CAD_DETECTED = 0x0100
+IRQ_TIMEOUT = 0x0200
+IRQ_ALL = 0x03FF
+IRQ_NONE = 0x0000
 
 # SetDio2AsRfSwitch
-DIO2_AS_IRQ                            = 0x00        # DIO2 configuration: IRQ
-DIO2_AS_RF_SWITCH                      = 0x01        #                     RF switch control
+DIO2_AS_IRQ = 0x00
+DIO2_AS_RF_SWITCH = 0x01
 
 # SetDio3AsTcxoCtrl
-DIO3_OUTPUT_1_6                        = 0x00        # DIO3 voltage output for TCXO: 1.6 V
-DIO3_OUTPUT_1_7                        = 0x01        #                               1.7 V
-DIO3_OUTPUT_1_8                        = 0x02        #                               1.8 V
-DIO3_OUTPUT_2_2                        = 0x03        #                               2.2 V
-DIO3_OUTPUT_2_4                        = 0x04        #                               2.4 V
-DIO3_OUTPUT_2_7                        = 0x05        #                               2.7 V
-DIO3_OUTPUT_3_0                        = 0x06        #                               3.0 V
-DIO3_OUTPUT_3_3                        = 0x07        #                               3.3 V
-TCXO_DELAY_2_5                         = 0x0140      # TCXO delay time: 2.5 ms
-TCXO_DELAY_5                           = 0x0280      #                  5 ms
-TCXO_DELAY_10                          = 0x0560      #                  10 ms
+DIO3_OUTPUT_1_6 = 0x00
+DIO3_OUTPUT_1_7 = 0x01
+DIO3_OUTPUT_1_8 = 0x02
+DIO3_OUTPUT_2_2 = 0x03
+DIO3_OUTPUT_2_4 = 0x04
+DIO3_OUTPUT_2_7 = 0x05
+DIO3_OUTPUT_3_0 = 0x06
+DIO3_OUTPUT_3_3 = 0x07
+TCXO_DELAY_2_5 = 0x0140
+TCXO_DELAY_5 = 0x0280
+TCXO_DELAY_10 = 0x0560
 
 # SetRfFrequency
-RF_FREQUENCY_XTAL                      = 32000000    # XTAL frequency used for RF frequency calculation
-RF_FREQUENCY_NOM                       = 33554432    # used for RF frequency calculation
+RF_FREQUENCY_XTAL = 32000000
+RF_FREQUENCY_NOM = 33554432
 
 # SetPacketType
-FSK_MODEM                              = 0x00        # GFSK packet type
-LORA_MODEM                             = 0x01        # LoRa packet type
+FSK_MODEM = 0x00
+LORA_MODEM = 0x01
 
 # SetTxParams
-PA_RAMP_10U                            = 0x00        # ramp time: 10 us
-PA_RAMP_20U                            = 0x01        #            20 us
-PA_RAMP_40U                            = 0x02        #            40 us
-PA_RAMP_80U                            = 0x03        #            80 us
-PA_RAMP_200U                           = 0x04        #            200 us
-PA_RAMP_800U                           = 0x05        #            800 us
-PA_RAMP_1700U                          = 0x06        #            1700 us
-PA_RAMP_3400U                          = 0x07        #            3400 us
+PA_RAMP_10U = 0x00
+PA_RAMP_20U = 0x01
+PA_RAMP_40U = 0x02
+PA_RAMP_80U = 0x03
+PA_RAMP_200U = 0x04
+PA_RAMP_800U = 0x05
+PA_RAMP_1700U = 0x06
+PA_RAMP_3400U = 0x07
 
 # SetModulationParams
-BW_7800                                = 0x00        # LoRa bandwidth: 7.8 kHz
-BW_10400                               = 0x08        #                 10.4 kHz
-BW_15600                               = 0x01        #                 15.6 kHz
-BW_20800                               = 0x09        #                 20.8 kHz
-BW_31250                               = 0x02        #                 31.25 kHz
-BW_41700                               = 0x0A        #                 41.7 kHz
-BW_62500                               = 0x03        #                 62.5 kHz
-BW_125000                              = 0x04        #                 125.0 kHz
-BW_250000                              = 0x05        #                 250.0 kHz
-BW_500000                              = 0x06        #                 500.0 kHz
-CR_4_4                                 = 0x00        # LoRa coding rate: 4/4 (no coding rate)
-CR_4_5                                 = 0x01        #                   4/5
-CR_4_6                                 = 0x01        #                   4/6
-CR_4_7                                 = 0x01        #                   4/7
-CR_4_8                                 = 0x01        #                   4/8
-LDRO_OFF                               = 0x00        # LoRa low data rate optimization: disabled
-LDRO_ON                                = 0x01        #                                  enabled
+BW_7800 = 0x00
+BW_10400 = 0x08
+BW_15600 = 0x01
+BW_20800 = 0x09
+BW_31250 = 0x02
+BW_41700 = 0x0A
+BW_62500 = 0x03
+BW_125000 = 0x04
+BW_250000 = 0x05
+BW_500000 = 0x06
+
+CR_4_4 = 0x00
+CR_4_5 = 0x01
+CR_4_6 = 0x01
+CR_4_7 = 0x01
+CR_4_8 = 0x01
+
+LDRO_OFF = 0x00
+LDRO_ON = 0x01
 
 # SetModulationParams for FSK packet type
-PULSE_NO_FILTER                        = 0x00        # FSK pulse shape: no filter applied
-PULSE_GAUSSIAN_BT_0_3                  = 0x08        #                  Gaussian BT 0.3
-PULSE_GAUSSIAN_BT_0_5                  = 0x09        #                  Gaussian BT 0.5
-PULSE_GAUSSIAN_BT_0_7                  = 0x0A        #                  Gaussian BT 0.7
-PULSE_GAUSSIAN_BT_1                    = 0x0B        #                  Gaussian BT 1
-BW_4800                                = 0x1F        # FSK bandwidth: 4.8 kHz DSB
-BW_5800                                = 0x17        #                5.8 kHz DSB
-BW_7300                                = 0x0F        #                7.3 kHz DSB
-BW_9700                                = 0x1E        #                9.7 kHz DSB
-BW_11700                               = 0x16        #                11.7 kHz DSB
-BW_14600                               = 0x0E        #                14.6 kHz DSB
-BW_19500                               = 0x1D        #                19.5 kHz DSB
-BW_23400                               = 0x15        #                23.4 kHz DSB
-BW_29300                               = 0x0D        #                29.3 kHz DSB
-BW_39000                               = 0x1C        #                39 kHz DSB
-BW_46900                               = 0x14        #                46.9 kHz DSB
-BW_58600                               = 0x0C        #                58.6 kHz DSB
-BW_78200                               = 0x1B        #                78.2 kHz DSB
-BW_93800                               = 0x13        #                93.8 kHz DSB
-BW_117300                              = 0x0B        #                117.3 kHz DSB
-BW_156200                              = 0x1A        #                156.2 kHz DSB
-BW_187200                              = 0x12        #                187.2 kHz DSB
-BW_234300                              = 0x0A        #                232.3 kHz DSB
-BW_312000                              = 0x19        #                312 kHz DSB
-BW_373600                              = 0x11        #                373.6 kHz DSB
-BW_467000                              = 0x09        #                476 kHz DSB
+PULSE_NO_FILTER = 0x00
+PULSE_GAUSSIAN_BT_0_3 = 0x08
+PULSE_GAUSSIAN_BT_0_5 = 0x09
+PULSE_GAUSSIAN_BT_0_7 = 0x0A
+PULSE_GAUSSIAN_BT_1 = 0x0B
+
+BW_4800 = 0x1F
+BW_5800 = 0x17
+BW_7300 = 0x0F
+BW_9700 = 0x1E
+BW_11700 = 0x16
+BW_14600 = 0x0E
+BW_19500 = 0x1D
+BW_23400 = 0x15
+BW_29300 = 0x0D
+BW_39000 = 0x1C
+BW_46900 = 0x14
+BW_58600 = 0x0C
+BW_78200 = 0x1B
+BW_93800 = 0x13
+BW_117300 = 0x0B
+BW_156200 = 0x1A
+BW_187200 = 0x12
+BW_234300 = 0x0A
+BW_312000 = 0x19
+BW_373600 = 0x11
+BW_467000 = 0x09
 
 # SetPacketParams
-HEADER_EXPLICIT                        = 0x00        # LoRa header mode: explicit
-HEADER_IMPLICIT                        = 0x01        #                   implicit
-CRC_OFF                                = 0x00        # LoRa CRC mode: disabled
-CRC_ON                                 = 0x01        #                enabled
-IQ_STANDARD                            = 0x00        # LoRa IQ setup: standard
-IQ_INVERTED                            = 0x01        #                inverted
+HEADER_EXPLICIT = 0x00
+HEADER_IMPLICIT = 0x01
+CRC_OFF = 0x00
+CRC_ON = 0x01
+IQ_STANDARD = 0x00
+IQ_INVERTED = 0x01
 
 # SetPacketParams for FSK packet type
-PREAMBLE_DET_LEN_OFF                   = 0x00        # FSK preamble detector length: off
-PREAMBLE_DET_LEN_8                     = 0x04        #                               8-bit
-PREAMBLE_DET_LEN_16                    = 0x05        #                               16-bit
-PREAMBLE_DET_LEN_24                    = 0x06        #                               24-bit
-PREAMBLE_DET_LEN_32                    = 0x07        #                               32-bit
-ADDR_COMP_OFF                          = 0x00        # FSK address filtering: off
-ADDR_COMP_NODE                         = 0x01        #                        filtering on node address
-ADDR_COMP_ALL                          = 0x02        #                        filtering on node and broadcast address
-PACKET_KNOWN                           = 0x00        # FSK packet type: the packet length known on both side
-PACKET_VARIABLE                        = 0x01        #                  the packet length on variable size
-CRC_0                                  = 0x01        # FSK CRC type: no CRC
-CRC_1                                  = 0x00        #               CRC computed on 1 byte
-CRC_2                                  = 0x02        #               CRC computed on 2 byte
-CRC_1_INV                              = 0x04        #               CRC computed on 1 byte and inverted
-CRC_2_INV                              = 0x06        #               CRC computed on 2 byte and inverted
-WHITENING_OFF                          = 0x00        # FSK whitening: no encoding
-WHITENING_ON                           = 0x01        #                whitening enable
+PREAMBLE_DET_LEN_OFF = 0x00
+PREAMBLE_DET_LEN_8 = 0x04
+PREAMBLE_DET_LEN_16 = 0x05
+PREAMBLE_DET_LEN_24 = 0x06
+PREAMBLE_DET_LEN_32 = 0x07
+
+ADDR_COMP_OFF = 0x00
+ADDR_COMP_NODE = 0x01
+ADDR_COMP_ALL = 0x02
+
+PACKET_KNOWN = 0x00
+PACKET_VARIABLE = 0x01
+
+CRC_0 = 0x01
+CRC_1 = 0x00
+CRC_2 = 0x02
+CRC_1_INV = 0x04
+CRC_2_INV = 0x06
+
+WHITENING_OFF = 0x00
+WHITENING_ON = 0x01
 
 # SetCadParams
-CAD_ON_1_SYMB                          = 0x00        # number of symbols used for CAD: 1
-CAD_ON_2_SYMB                          = 0x01        #                                 2
-CAD_ON_4_SYMB                          = 0x02        #                                 4
-CAD_ON_8_SYMB                          = 0x03        #                                 8
-CAD_ON_16_SYMB                         = 0x04        #                                 16
-CAD_EXIT_STDBY                         = 0x00        # after CAD is done, always exit to STDBY_RC mode
-CAD_EXIT_RX                            = 0x01        # after CAD is done, exit to Rx mode if activity is detected
+CAD_ON_1_SYMB = 0x00
+CAD_ON_2_SYMB = 0x01
+CAD_ON_4_SYMB = 0x02
+CAD_ON_8_SYMB = 0x03
+CAD_ON_16_SYMB = 0x04
+
+CAD_EXIT_STDBY = 0x00
+CAD_EXIT_RX = 0x01
 
 # GetStatus
-STATUS_DATA_AVAILABLE                  = 0x04        # command status: packet received and data can be retrieved
-STATUS_CMD_TIMEOUT                     = 0x06        #                 SPI command timed out
-STATUS_CMD_ERROR                       = 0x08        #                 invalid SPI command
-STATUS_CMD_FAILED                      = 0x0A        #                 SPI command failed to execute
-STATUS_CMD_TX_DONE                     = 0x0C        #                 packet transmission done
-STATUS_MODE_STDBY_RC                   = 0x20        # current chip mode: STDBY_RC
-STATUS_MODE_STDBY_XOSC                 = 0x30        #                    STDBY_XOSC
-STATUS_MODE_FS                         = 0x40        #                    FS
-STATUS_MODE_RX                         = 0x50        #                    RX
-STATUS_MODE_TX                         = 0x60        #                    TX
+STATUS_DATA_AVAILABLE = 0x04
+STATUS_CMD_TIMEOUT = 0x06
+STATUS_CMD_ERROR = 0x08
+STATUS_CMD_FAILED = 0x0A
+STATUS_CMD_TX_DONE = 0x0C
+
+STATUS_MODE_STDBY_RC = 0x20
+STATUS_MODE_STDBY_XOSC = 0x30
+STATUS_MODE_FS = 0x40
+STATUS_MODE_RX = 0x50
+STATUS_MODE_TX = 0x60
 
 # GetDeviceErrors
-RC64K_CALIB_ERR                        = 0x0001      # device errors: RC64K calibration failed
-RC13M_CALIB_ERR                        = 0x0002      #                RC13M calibration failed
-PLL_CALIB_ERR                          = 0x0004      #                PLL calibration failed
-ADC_CALIB_ERR                          = 0x0008      #                ADC calibration failed
-IMG_CALIB_ERR                          = 0x0010      #                image calibration failed
-XOSC_START_ERR                         = 0x0020      #                crystal oscillator failed to start
-PLL_LOCK_ERR                           = 0x0040      #                PLL failed to lock
-PA_RAMP_ERR                            = 0x0100      #                PA ramping failed
+RC64K_CALIB_ERR = 0x0001
+RC13M_CALIB_ERR = 0x0002
+PLL_CALIB_ERR = 0x0004
+ADC_CALIB_ERR = 0x0008
+IMG_CALIB_ERR = 0x0010
+XOSC_START_ERR = 0x0020
+PLL_LOCK_ERR = 0x0040
+PA_RAMP_ERR = 0x0100
 
 # LoraSyncWord
-LORA_SYNC_WORD_PUBLIC                  = 0x3444      # LoRa SyncWord for public network
-LORA_SYNC_WORD_PRIVATE                 = 0x0741      # LoRa SyncWord for private network (default)
+LORA_SYNC_WORD_PUBLIC = 0x3444
+LORA_SYNC_WORD_PRIVATE = 0x0741
 
 # RxGain
-RX_GAIN_POWER_SAVING                   = 0x00        # gain used in Rx mode: power saving gain (default)
-RX_GAIN_BOOSTED                        = 0x01        #                       boosted gain
-POWER_SAVING_GAIN                      = 0x94        # power saving gain register value
-BOOSTED_GAIN                           = 0x96        # boosted gain register value
+RX_GAIN_POWER_SAVING = 0x00
+RX_GAIN_BOOSTED = 0x01
+POWER_SAVING_GAIN = 0x94
+BOOSTED_GAIN = 0x96
 
-# TX and RX operation status 
-STATUS_DEFAULT                         = 0           # default status (false)
-STATUS_TX_WAIT                         = 1
-STATUS_TX_TIMEOUT                      = 2
-STATUS_TX_DONE                         = 3
-STATUS_RX_WAIT                         = 4
-STATUS_RX_CONTINUOUS                   = 5
-STATUS_RX_TIMEOUT                      = 6
-STATUS_RX_DONE                         = 7
-STATUS_HEADER_ERR                      = 8
-STATUS_CRC_ERR                         = 9
-STATUS_CAD_WAIT                        = 10
-STATUS_CAD_DETECTED                    = 11
-STATUS_CAD_DONE                        = 12
+# TX and RX operation status
+STATUS_DEFAULT = 0
+STATUS_TX_WAIT = 1
+STATUS_TX_TIMEOUT = 2
+STATUS_TX_DONE = 3
+STATUS_RX_WAIT = 4
+STATUS_RX_CONTINUOUS = 5
+STATUS_RX_TIMEOUT = 6
+STATUS_RX_DONE = 7
+STATUS_HEADER_ERR = 8
+STATUS_CRC_ERR = 9
+STATUS_CAD_WAIT = 10
+STATUS_CAD_DETECTED = 11
+STATUS_CAD_DONE = 12
 
 # SPI and GPIO pin setting
-Bus = 0
-Cs = 0
-Reset = 22
-Busy = 23
-Cs_define = 21
-Irq = -1
-Txen = -1
-Rxen = -1
-Wake = -1
-BusyTimeout = 5000
-SpiSpeed = 7800000
-TxState = gpio.LOW
-RxState = gpio.LOW
+BUS = 0
+CS = 0
+RESET = 22
+BUSY = 23
+CS_DEFINE = 21
+IRQ = -1
+TXEN = -1
+RXEN = -1
+WAKE = -1
+BUSY_TIMEOUT = 5000
+SPI_SPEED = 7800000
+
+# lgpio uses 0/1 for levels
+TX_STATE = 0
+RX_STATE = 0
 
 # LoRa setting
-Dio = 1
-Modem = LORA_MODEM
-Sf = 7
-Bw = 125000
-Cr = 5
-Ldro = False
-HeaderType = HEADER_EXPLICIT
-PreambleLength = 12
-PayloadLength = 32
-CrcType = False
-InvertIq = False
+DIO = 1
+MODEM = LORA_MODEM
+SF = 7
+BW = 125000
+CR = 5
+LDRO = False
+HEADER_TYPE = HEADER_EXPLICIT
+PREAMBLE_LENGTH = 12
+PAYLOAD_LENGTH = 32
+CRC_TYPE = False
+INVERT_IQ = False
 
 # Operation properties
-BufferIndex = 0
-PayloadTxRx = 32
-StatusWait = STATUS_DEFAULT
-StatusIrq = STATUS_DEFAULT
-TransmitTime = 0.0
+BUFFER_INDEX = 0
+PAYLOAD_TX_RX = 32
+STATUS_WAIT = STATUS_DEFAULT
+STATUS_IRQ = STATUS_DEFAULT
+TRANSMIT_TIME = 0.0
 
 # callback functions
-OnTransmit = None
-OnReceive = None
+ON_TRANSMIT = None
+ON_RECEIVE = None

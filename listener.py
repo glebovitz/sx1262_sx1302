@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-import time
 import threading
 import time
+
 from sx1262_constants import *
-from sx1262 import SX1262 as SX126x # adjust if your driver file has a different name
+from sx1262 import SX1262 as SX126x  # adjust if your driver file has a different name
 
 # ------------------------------------------------------------
 # Pin mapping (BCM) — confirmed by your continuity testing
 # ------------------------------------------------------------
-BUSY_PIN  = 20   # Physical Pin 38
-IRQ_PIN   = 16   # Physical Pin 36 (DIO1)
+BUSY_PIN = 20    # Physical Pin 38
+IRQ_PIN = 16     # Physical Pin 36 (DIO1)  (unused here; we poll IRQ status)
 RESET_PIN = 18   # Physical Pin 12
-NSS_PIN   = 21   # Physical Pin 40 (manual CS)
-SPI_BUS   = 0
-SPI_DEV   = 0
+NSS_PIN = 21     # Physical Pin 40 (manual CS, mapped as CS_DEFINE in constants)
+SPI_BUS = 0
+SPI_DEV = 0
 
 # ------------------------------------------------------------
 # Radio parameters
@@ -28,21 +28,21 @@ CRC_ENABLED = True
 INVERT_IQ = False
 
 
-
 def start_background_rssi(driver, interval=5):
     """
-    driver.get_rssi_inst() must return instantaneous RSSI in dBm.
+    driver.rssi_inst() returns instantaneous RSSI in dBm.
     Runs forever in a daemon thread.
     """
+
     def loop():
         while True:
             try:
-                rssi = driver.rssiInst()
+                rssi = driver.rssi_inst()
                 print("RSSI:", rssi)
-                # Flush the SPI bus with a dummy transaction
-                resp = driver.getMode()
-                print("Raw GET_STATUS bytes:", hex(resp))
 
+                # Flush the SPI bus / status
+                mode = driver.get_mode()
+                print("Raw mode bits from GET_STATUS:", hex(mode) if mode is not None else "None")
 
             except Exception as e:
                 print("RSSI monitor error:", e)
@@ -51,15 +51,19 @@ def start_background_rssi(driver, interval=5):
     t = threading.Thread(target=loop, daemon=True)
     t.start()
 
+
 def start_irq_polling(driver, interval=0.01):
+    """
+    Poll the IRQ status register and, if non-zero, invoke
+    the driver's internal RX interrupt handler.
+    """
+
     def loop():
         while True:
-            irq = driver.getIrqStatus()
-
+            irq = driver.get_irq_status()
             if irq:
                 # Let the driver decode the IRQ and call on_rx()
-                driver._interruptRx(None)
-
+                driver._interrupt_rx(None)
             time.sleep(interval)
 
     t = threading.Thread(target=loop, daemon=True)
@@ -68,7 +72,7 @@ def start_irq_polling(driver, interval=0.01):
 
 def on_rx():
     """
-    IRQ callback invoked by the driver when a packet is received.
+    RX callback invoked by the driver when a packet is received.
     """
     status = radio.status()
 
@@ -76,7 +80,7 @@ def on_rx():
         available = radio.available()
         data = radio.get(available)
 
-        rssi = radio.packetRssi()
+        rssi = radio.packet_rssi()
         snr = radio.snr()
 
         print("\n--- PACKET RECEIVED ---")
@@ -96,9 +100,9 @@ def on_rx():
         print("RX timeout (unexpected in continuous mode)")
     else:
         print("Nada")
-    irq = radio.getIrqStatus()
-    radio.clearIrqStatus(irq)
 
+    irq = radio.get_irq_status()
+    radio.clear_irq_status(irq)
 
 
 def main():
@@ -116,7 +120,7 @@ def main():
         irq=-1,
         txen=-1,
         rxen=-1,
-        wake=-1
+        wake=-1,
     )
 
     if not ok:
@@ -124,36 +128,40 @@ def main():
 
     print("Configuring radio…")
 
+    # Optional: background RSSI monitor
     # start_background_rssi(radio, interval=5)
+
+    # Poll IRQ status in a background thread instead of GPIO edge callbacks
     start_irq_polling(radio)
 
-    radio.setSyncWord(LORA_SYNC_WORD_PUBLIC)
+    # Sync word (public network)
+    radio.set_sync_word(LORA_SYNC_WORD_PUBLIC)
 
     # Frequency
-    radio.setFrequency(FREQUENCY_HZ)
+    radio.set_frequency(FREQUENCY_HZ)
 
     # LoRa modulation
-    radio.setLoRaModulation(
+    radio.set_lora_modulation(
         sf=SPREADING_FACTOR,
         bw=BANDWIDTH_HZ,
         cr=CODING_RATE,
-        ldro=False
+        ldro=False,
     )
 
     # Packet parameters
-    radio.setLoRaPacket(
-        headerType=HEADER_EXPLICIT,
-        preambleLength=PREAMBLE_LENGTH,
-        payloadLength=PAYLOAD_LENGTH,
-        crcType=CRC_ENABLED,
-        invertIq=INVERT_IQ
+    radio.set_lora_packet(
+        header_type=HEADER_EXPLICIT,
+        preamble_length=PREAMBLE_LENGTH,
+        payload_length=PAYLOAD_LENGTH,
+        crc_type=CRC_ENABLED,
+        invert_iq=INVERT_IQ,
     )
 
     # Optional: boosted gain
-    radio.setRxGain(RX_GAIN_BOOSTED)
+    radio.set_rx_gain(RX_GAIN_BOOSTED)
 
     # Register callback
-    radio.onReceive(on_rx)
+    radio.on_receive(on_rx)
 
     print(f"Starting continuous receive at {FREQUENCY_HZ/1e6:.6f} MHz…")
     print("Waiting for packets…")

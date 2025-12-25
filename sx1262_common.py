@@ -1,80 +1,83 @@
-from base import BaseLoRa
-import spidev
-import RPi.GPIO
 import time
-from sx1262_constants import *
 
-### COMMON OPERATIONAL METHODS ###
+from sx1262_constants import *
+import lgpio
+
+
 class SX1262Common:
-    def begin(self, bus: int = Bus, cs: int = Cs, reset: int = Reset, busy: int = Busy, irq: int = Irq, txen: int = Txen, rxen: int = Rxen, wake: int = Wake) :
-        print(f"pins: bus: {bus} cs:{cs} reset:{reset} irq: {irq} busy: {busy}")
-        # set spi and gpio pins
-        self.setSpi(bus, cs)
-        self.setPins(reset, busy, irq, txen, rxen, wake)
-        # perform device reset
+    def begin(
+        self,
+        bus: int = BUS,
+        cs: int = CS,
+        reset: int = RESET,
+        busy: int = BUSY,
+        irq: int = IRQ,
+        txen: int = TXEN,
+        rxen: int = RXEN,
+        wake: int = WAKE,
+    ) -> bool:
+        print(f"pins: bus: {bus} cs:{cs} reset:{reset} irq:{irq} busy:{busy}")
+
+        self.set_spi(bus, cs)
+        self.set_pins(reset, busy, irq, txen, rxen, wake)
+
         self.reset()
 
-        # check if device connect and set modem to LoRa
-        self.setStandby(STANDBY_RC)
-        if self.getMode() != STATUS_MODE_STDBY_RC :
+        self.set_standby(STANDBY_RC)
+        if self.get_mode() != STATUS_MODE_STDBY_RC:
             return False
-        self.setPacketType(LORA_MODEM)
-        self._fixResistanceAntenna()
+
+        self.set_packet_type(LORA_MODEM)
+        self._fix_resistance_antenna()
         return True
 
-    def end(self) :
-
+    def end(self):
         self.sleep(SLEEP_COLD_START)
         self.spi.close()
-        self.gpio.cleanup()
+        # close gpio chip handle
+        lgpio.gpiochip_close(self.gpio_chip)
 
-    def getStatus(self):
-        resp = self._readBytes(0xC0, 1)
+    def get_status(self):
+        resp = self._read_bytes(0xC0, 1)
         if not resp:
             return None
         return resp[0]
 
-    def reset(self) -> bool :
-
-        # put reset pin to low then wait busy pin to low
-        self.gpio.output(self._reset, self.gpio.LOW)
+    def reset(self) -> bool:
+        lgpio.gpio_write(self.gpio_chip, self._reset, 0)
         time.sleep(0.001)
-        self.gpio.output(self._reset, self.gpio.HIGH)
-        return not self.busyCheck()
+        lgpio.gpio_write(self.gpio_chip, self._reset, 1)
+        return not self.busy_check()
 
-    def sleep(self, option = SLEEP_WARM_START) :
-
-        # put device in sleep mode, wait for 500 us to enter sleep mode
+    def sleep(self, option=SLEEP_WARM_START):
         self.standby()
-        self.setSleep(option)
+        self.set_sleep(option)
         time.sleep(0.0005)
 
-    def wake(self) :
-
-        # wake device by set wake pin (cs pin) to low before spi transaction and put device in standby mode
-        if (self._wake != -1) :
-            self.gpio.setup(self._wake, self.gpio.OUT)
-            self.gpio.output(self._wake, self.gpio.LOW)
+    def wake(self):
+        if self._wake != -1:
+            lgpio.gpio_claim_output(self.gpio_chip, self._wake)
+            lgpio.gpio_write(self.gpio_chip, self._wake, 0)
             time.sleep(0.0005)
-        self.setStandby(STANDBY_RC)
-        self._fixResistanceAntenna()
 
-    def standby(self, option = STANDBY_RC) :
+        self.set_standby(STANDBY_RC)
+        self._fix_resistance_antenna()
 
-        self.setStandby(option)
+    def standby(self, option=STANDBY_RC):
+        self.set_standby(option)
 
-    def busyCheck(self, timeout: int = BusyTimeout) :
-
-        # wait for busy pin to LOW or timeout reached
-        t = time.time()
-        while self.gpio.input(self._busy) == self.gpio.HIGH :
-            if (time.time() - t) > (timeout / 1000) : return True
+    def busy_check(self, timeout: int = BUSY_TIMEOUT) -> bool:
+        start = time.time()
+        while lgpio.gpio_read(self.gpio_chip, self._busy) == 1:
+            if (time.time() - start) > (timeout / 1000.0):
+                return True
         return False
 
-    def setFallbackMode(self, fallbackMode) :
+    def set_fallback_mode(self, fallback_mode):
+        self.set_rx_tx_fallback_mode(fallback_mode)
 
-        self.setRxTxFallbackMode(fallbackMode)
-
-    def getMode(self) -> int :
-
-        return self.getStatus() & 0x70
+    def get_mode(self) -> int:
+        status = self.get_status()
+        if status is None:
+            return 0
+        return status & 0x70

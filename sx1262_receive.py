@@ -1,123 +1,99 @@
-from base import BaseLoRa
-import spidev
-import RPi.GPIO
 import time
+import lgpio
+
 from sx1262_constants import *
 
+
 class SX1262Receive:
-### RECEIVE RELATED METHODS ###
+    # RECEIVE RELATED METHODS
 
-    def request(self, timeout: int = RX_SINGLE) -> bool :
+    def request(self, timeout: int = RX_SINGLE) -> bool:
+        if self.get_mode() == STATUS_MODE_RX:
+            return False
 
-        # skip to enter RX mode when previous RX operation incomplete
-        if self.getMode() == STATUS_MODE_RX : return False
+        self._irq_setup(IRQ_RX_DONE | IRQ_TIMEOUT | IRQ_HEADER_ERR | IRQ_CRC_ERR)
 
-        # clear previous interrupt and set RX done, RX timeout, header error, and CRC error as interrupt source
-        self._irqSetup(IRQ_RX_DONE | IRQ_TIMEOUT | IRQ_HEADER_ERR | IRQ_CRC_ERR)
+        self._status_wait = STATUS_RX_WAIT
+        self._status_irq = 0x0000
 
-        # set status to RX wait or RX continuous wait
-        self._statusWait = STATUS_RX_WAIT
-        self._statusIrq = 0x0000
-        # calculate RX timeout config
-        rxTimeout = timeout << 6
-        if rxTimeout > 0x00FFFFFF : rxTimeout = RX_SINGLE
-        if timeout == RX_CONTINUOUS :
-            rxTimeout = RX_CONTINUOUS
-            self._statusWait = STATUS_RX_CONTINUOUS
+        rx_timeout = timeout << 6
+        if rx_timeout > 0x00FFFFFF:
+            rx_timeout = RX_SINGLE
+        if timeout == RX_CONTINUOUS:
+            rx_timeout = RX_CONTINUOUS
+            self._status_wait = STATUS_RX_CONTINUOUS
 
-        # save current txen pin state and set txen pin to high
-        if self._txen != -1 :
-            self._txState = self.gpio.input(self._txen)
-            self.gpio.output(self._txen, self.gpio.HIGH)
+        if self._txen != -1:
+            self._tx_state = lgpio.gpio_read(self.gpio_chip, self._txen)
+            lgpio.gpio_write(self.gpio_chip, self._txen, 1)
 
-        # set device to receive mode with configured timeout, single, or continuous operation
-        self.setRx(rxTimeout)
+        self.set_rx(rx_timeout)
 
-        # set operation status to wait and attach RX interrupt handler
-        if self._irq != -1 :
-            self.gpio.remove_event_detect(self._irq)
-            print("IRQ pin:", self._irq)
-            print("IRQ mode:", self.gpio.gpio_function(self._irq))
-            print("IRQ level:", self.gpio.input(self._irq))
-
-            self.gpio.remove_event_detect(16)
-            if timeout == RX_CONTINUOUS :
-                self.gpio.add_event_detect(self._irq, self.gpio.RISING, callback=self._interruptRxContinuous, bouncetime=10)
-            else :
-                self.gpio.add_event_detect(self._irq, self.gpio.RISING, callback=self._interruptRx, bouncetime=10)
+        # NOTE: RPi.GPIO event callbacks removed; if you want
+        # lgpio alert-based handling, we can add a small helper
+        # thread to poll gpio_read_event() and call _interrupt_rx*
         return True
 
-    def listen(self, rxPeriod: int, sleepPeriod: int) -> bool :
+    def listen(self, rx_period: int, sleep_period: int) -> bool:
+        if self.get_mode() == STATUS_MODE_RX:
+            return False
 
-        # skip to enter RX mode when previous RX operation incomplete
-        if self.getMode() == STATUS_MODE_RX : return False
+        self._irq_setup(IRQ_RX_DONE | IRQ_TIMEOUT | IRQ_HEADER_ERR | IRQ_CRC_ERR)
 
-        # clear previous interrupt and set RX done, RX timeout, header error, and CRC error as interrupt source
-        self._irqSetup(IRQ_RX_DONE | IRQ_TIMEOUT | IRQ_HEADER_ERR | IRQ_CRC_ERR)
+        self._status_wait = STATUS_RX_WAIT
+        self._status_irq = 0x0000
 
-        # set status to RX wait or RX continuous wait
-        self._statusWait = STATUS_RX_WAIT
-        self._statusIrq = 0x0000
-        # calculate RX period and sleep period config
-        rxPeriod = rxPeriod << 6
-        sleepPeriod = sleepPeriod << 6
-        if rxPeriod > 0x00FFFFFF : rxPeriod = 0x00FFFFFF
-        if sleepPeriod > 0x00FFFFFF : sleepPeriod = 0x00FFFFFF
+        rx_period = rx_period << 6
+        sleep_period = sleep_period << 6
 
-        # save current txen pin state and set txen pin to high
-        if self._txen != -1 :
-            self._txState = self.gpio.input(self._txen)
-            self.gpio.output(self._txen, self.gpio.HIGH)
+        if rx_period > 0x00FFFFFF:
+            rx_period = 0x00FFFFFF
+        if sleep_period > 0x00FFFFFF:
+            sleep_period = 0x00FFFFFF
 
-        # set device to receive mode with configured receive and sleep period
-        self.setRxDutyCycle(rxPeriod, sleepPeriod)
+        if self._txen != -1:
+            self._tx_state = lgpio.gpio_read(self.gpio_chip, self._txen)
+            lgpio.gpio_write(self.gpio_chip, self._txen, 1)
 
-        # set operation status to wait and attach RX interrupt handler
-        if self._irq != -1 :
-            self.gpio.remove_event_detect(self._irq)
-            self.gpio.add_event_detect(self._irq, self.gpio.RISING, callback=self._interruptRx, bouncetime=10)
+        self.set_rx_duty_cycle(rx_period, sleep_period)
+
         return True
 
-    def available(self) -> int :
+    def available(self) -> int:
+        return self._payload_tx_rx
 
-        # get size of package still available to read
-        return self._payloadTxRx
-
-    def read(self, length: int = 0) :
-
-        # single or multiple bytes read
+    def read(self, length: int = 0):
         single = False
-        if length == 0 :
+        if length == 0:
             length = 1
             single = True
-        # read data from buffer and update buffer index and payload
-        buf = self.readBuffer(self._bufferIndex, length)
-        self._bufferIndex = (self._bufferIndex + length) % 256
-        if self._payloadTxRx > length :
-            self._payloadTxRx -= length
-        else :
-            self._payloadTxRx = 0
-        # return single byte or tuple
-        if single : return buf[0]
-        else : return buf
 
-    def get(self, length: int = 1) -> bytes :
+        buf = self.read_buffer(self._buffer_index, length)
+        self._buffer_index = (self._buffer_index + length) % 256
 
-        # read data from buffer and update buffer index and payload
-        buf = self.readBuffer(self._bufferIndex, length)
-        self._bufferIndex = (self._bufferIndex + length) % 256
-        if self._payloadTxRx > length :
-            self._payloadTxRx -= length
-        else :
-            self._payloadTxRx = 0
-        # return array of bytes
+        if self._payload_tx_rx > length:
+            self._payload_tx_rx -= length
+        else:
+            self._payload_tx_rx = 0
+
+        if single:
+            return buf[0]
+        return buf
+
+    def get(self, length: int = 1) -> bytes:
+        buf = self.read_buffer(self._buffer_index, length)
+        self._buffer_index = (self._buffer_index + length) % 256
+
+        if self._payload_tx_rx > length:
+            self._payload_tx_rx -= length
+        else:
+            self._payload_tx_rx = 0
+
         return bytes(buf)
 
-    def purge(self, length: int = 0) :
-
-        # subtract or reset received payload length
-        if self._bufferIndex > length :
-            self._payloadTxRx = self._payloadTxRx - length
-        else :
-            self._payloadTxRx = 0
-        self._bufferIndex += self._payloadTxRx
+    def purge(self, length: int = 0):
+        if self._buffer_index > length:
+            self._payload_tx_rx = self._payload_tx_rx - length
+        else:
+            self._payload_tx_rx = 0
+        self._buffer_index += self._payload_tx_rx

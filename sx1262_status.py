@@ -1,102 +1,98 @@
-from base import BaseLoRa
-import spidev
-import RPi.GPIO
 import time
+
 from sx1262_constants import *
 
+
 class SX1262Status:
-### WAIT, OPERATION STATUS, AND PACKET STATUS METHODS ###
+    # WAIT, OPERATION STATUS, AND PACKET STATUS METHODS
 
-    def wait(self, timeout: int = 0) -> bool :
-
-        # immediately return when currently not waiting transmit or receive process
-        if self._statusIrq :
+    def wait(self, timeout: int = 0) -> bool:
+        if self._status_irq:
             return True
 
-        # wait transmit or receive process finish by checking IRQ status
-        irqStat = 0x0000
-        t = time.time()
-        while irqStat == 0x0000 and self._statusIrq == 0x0000 :
-            # only check IRQ status register for non interrupt operation
-            if self._irq == -1 : irqStat = self.getIrqStatus()
-            # return when timeout reached
-            if (time.time() - t) > timeout and timeout > 0 : return False
+        irq_stat = 0x0000
+        start = time.time()
 
-        if self._statusIrq :
-            # immediately return when interrupt signal hit
+        while irq_stat == 0x0000 and self._status_irq == 0x0000:
+            if self._irq == -1:
+                irq_stat = self.get_irq_status()
+
+            if timeout > 0 and (time.time() - start) > timeout:
+                return False
+
+        if self._status_irq:
             return True
-        elif self._statusWait == STATUS_TX_WAIT :
-            # for transmit, calculate transmit time and set back txen pin to previous state
-            self._transmitTime = time.time() - self._transmitTime
-            if self._txen != -1 :
-                self.gpio.output(self._txen, self._txState)
-        elif self._statusWait == STATUS_RX_WAIT :
-            # for receive, get received payload length and buffer index and set back txen pin to previous state
-            (self._payloadTxRx, self._bufferIndex) = self.getRxBufferStatus()
-            if self._txen != -1 :
-                self.gpio.output(self._txen, self._txState)
-            self._fixRxTimeout()
-        elif self._statusWait == STATUS_RX_CONTINUOUS :
-            # for receive continuous, get received payload length and buffer index and clear IRQ status
-            (self._payloadTxRx, self._bufferIndex) = self.getRxBufferStatus()
-            self.clearIrqStatus(0x03FF)
+        elif self._status_wait == STATUS_TX_WAIT:
+            self._transmit_time = time.time() - self._transmit_time
+            if self._txen != -1:
+                # restore TXEN pin
+                # value already in self._tx_state
+                from lgpio import gpio_write
 
-        # store IRQ status
-        self._statusIrq = irqStat
+                gpio_write(self.gpio_chip, self._txen, self._tx_state)
+
+        elif self._status_wait == STATUS_RX_WAIT:
+            (self._payload_tx_rx, self._buffer_index) = self.get_rx_buffer_status()
+            if self._txen != -1:
+                from lgpio import gpio_write
+
+                gpio_write(self.gpio_chip, self._txen, self._tx_state)
+            self._fix_rx_timeout()
+
+        elif self._status_wait == STATUS_RX_CONTINUOUS:
+            (self._payload_tx_rx, self._buffer_index) = self.get_rx_buffer_status()
+            self.clear_irq_status(IRQ_ALL)
+
+        self._status_irq = irq_stat
         return True
 
-    def status(self) -> int :
+    def status(self) -> int:
+        status_irq = self._status_irq
+        if self._status_wait == STATUS_RX_CONTINUOUS:
+            self._status_irq = 0x0000
 
-        # set back status IRQ for RX continuous operation
-        statusIrq = self._statusIrq
-        if self._statusWait == STATUS_RX_CONTINUOUS :
-            self._statusIrq = 0x0000
+        if status_irq & IRQ_TIMEOUT:
+            if self._status_wait == STATUS_TX_WAIT:
+                return STATUS_TX_TIMEOUT
+            else:
+                return STATUS_RX_TIMEOUT
+        elif status_irq & IRQ_HEADER_ERR:
+            return STATUS_HEADER_ERR
+        elif status_irq & IRQ_CRC_ERR:
+            return STATUS_CRC_ERR
+        elif status_irq & IRQ_TX_DONE:
+            return STATUS_TX_DONE
+        elif status_irq & IRQ_RX_DONE:
+            return STATUS_RX_DONE
 
-        # get status for transmit and receive operation based on status IRQ
-        if statusIrq & IRQ_TIMEOUT :
-            if self._statusWait == STATUS_TX_WAIT : return STATUS_TX_TIMEOUT
-            else : return STATUS_RX_TIMEOUT
-        elif statusIrq & IRQ_HEADER_ERR : return STATUS_HEADER_ERR
-        elif statusIrq & IRQ_CRC_ERR : return STATUS_CRC_ERR
-        elif statusIrq & IRQ_TX_DONE : return STATUS_TX_DONE
-        elif statusIrq & IRQ_RX_DONE : return STATUS_RX_DONE
+        return self._status_wait
 
-        # return TX or RX wait status
-        return self._statusWait
+    def transmit_time(self) -> float:
+        return self._transmit_time * 1000
 
-    def transmitTime(self) -> float :
+    def data_rate(self) -> float:
+        if self._transmit_time == 0:
+            return 0.0
+        return self._payload_tx_rx / self._transmit_time
 
-        # get transmit time in millisecond (ms)
-        return self._transmitTime * 1000
+    def packet_rssi(self) -> float:
+        (rssi_pkt, snr_pkt, signal_rssi_pkt) = self.get_packet_status()
+        return rssi_pkt / -2.0
 
-    def dataRate(self) -> float :
+    def snr(self) -> float:
+        (rssi_pkt, snr_pkt, signal_rssi_pkt) = self.get_packet_status()
+        if snr_pkt > 127:
+            snr_pkt = snr_pkt - 256
+        return snr_pkt / 4.0
 
-        # get data rate last transmitted package in kbps
-        return self._payloadTxRx / self._transmitTime
+    def signal_rssi(self) -> float:
+        (rssi_pkt, snr_pkt, signal_rssi_pkt) = self.get_packet_status()
+        return signal_rssi_pkt / -2.0
 
-    def packetRssi(self) -> float :
+    def rssi_inst(self) -> float:
+        return self.get_rssi_inst() / -2.0
 
-        # get relative signal strength index (RSSI) of last incoming package
-        (rssiPkt, snrPkt, signalRssiPkt) = self.getPacketStatus()
-        return rssiPkt / -2.0
-
-    def snr(self) -> float :
-
-        # get signal to noise ratio (SNR) of last incoming package
-        (rssiPkt, snrPkt, signalRssiPkt) = self.getPacketStatus()
-        if snrPkt > 127 : snrPkt = snrPkt - 256
-        return snrPkt / 4.0
-
-    def signalRssi(self) -> float :
-
-        (rssiPkt, snrPkt, signalRssiPkt) = self.getPacketStatus()
-        return signalRssiPkt / -2.0
-
-    def rssiInst(self) -> float :
-
-        return self.getRssiInst() / -2.0
-
-    def getError(self) -> int :
-        error = self.getDeviceErrors()
-        self.clearDeviceErrors()
+    def get_error(self) -> int:
+        error = self.get_device_errors()
+        self.clear_device_errors()
         return error

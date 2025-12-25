@@ -1,73 +1,64 @@
-from base import BaseLoRa
-import spidev
-import RPi.GPIO
 import time
+
 from sx1262_constants import *
 
+
 class SX1262Interrupt:
-### INTERRUPT HANDLER METHODS ###
+    # INTERRUPT HANDLER METHODS
 
-    def _irqSetup(self, irqMask) :
+    def _irq_setup(self, irq_mask):
+        self.clear_irq_status(IRQ_ALL)
 
-        # clear IRQ status of previous transmit or receive operation
-        self.clearIrqStatus(0x03FF)
-        # set selected interrupt source
-        dio1Mask = 0x0000
-        dio2Mask = 0x0000
-        dio3Mask = 0x0000
-        if self._dio == 2 : dio2Mask = irqMask
-        elif self._dio == 3 : dio3Mask = irqMask
-        else : dio1Mask = irqMask
-        self.setDioIrqParams(irqMask, dio1Mask, dio2Mask, dio3Mask)
+        dio1_mask = 0x0000
+        dio2_mask = 0x0000
+        dio3_mask = 0x0000
 
-    def _interruptTx(self, channel) :
+        if self._dio == 2:
+            dio2_mask = irq_mask
+        elif self._dio == 3:
+            dio3_mask = irq_mask
+        else:
+            dio1_mask = irq_mask
 
-        # calculate transmit time
-        self._transmitTime = time.time() - self._transmitTime
-        # set back txen pin to previous state
-        if self._txen != -1 :
-            self.gpio.output(self._txen, self._txState)
-        # store IRQ status
-        self._statusIrq = self.getIrqStatus()
+        self.set_dio_irq_params(irq_mask, dio1_mask, dio2_mask, dio3_mask)
 
-        # call onTransmit function
-        if callable(self._onTransmit) :
-            self._onTransmit()
+    def _interrupt_tx(self, _channel=None):
+        self._transmit_time = time.time() - self._transmit_time
 
-    def _interruptRx(self, channel) :
+        # restore TXEN
+        if self._txen != -1:
+            from lgpio import gpio_write
 
-        # set back txen pin to previous state
-        if self._txen != -1 :
-            self.gpio.output(self._txen, self._txState)
-        self._fixRxTimeout()
-        # store IRQ status
-        self._statusIrq = self.getIrqStatus()
-        # get received payload length and buffer index
-        (self._payloadTxRx, self._bufferIndex) = self.getRxBufferStatus()
+            gpio_write(self.gpio_chip, self._txen, self._tx_state)
 
-        # call onReceive function
-        if callable(self._onReceive) :
-            self._onReceive()
+        self._status_irq = self.get_irq_status()
 
-    def _interruptRxContinuous(self, channel) :
+        if callable(self._on_transmit):
+            self._on_transmit()
 
-        # store IRQ status
-        self._statusIrq = self.getIrqStatus()
-        # clear IRQ status
-        self.clearIrqStatus(0x03FF)
-        # get received payload length and buffer index
-        (self._payloadTxRx, self._bufferIndex) = self.getRxBufferStatus()
+    def _interrupt_rx(self, _channel=None):
+        if self._txen != -1:
+            from lgpio import gpio_write
 
-        # call onReceive function
-        if callable(self._onReceive) :
-            self._onReceive()
+            gpio_write(self.gpio_chip, self._txen, self._tx_state)
 
-    def onTransmit(self, callback) :
+        self._fix_rx_timeout()
+        self._status_irq = self.get_irq_status()
+        (self._payload_tx_rx, self._buffer_index) = self.get_rx_buffer_status()
 
-        # register onTransmit function to call every transmit done
-        self._onTransmit = callback
+        if callable(self._on_receive):
+            self._on_receive()
 
-    def onReceive(self, callback) :
+    def _interrupt_rx_continuous(self, _channel=None):
+        self._status_irq = self.get_irq_status()
+        self.clear_irq_status(IRQ_ALL)
+        (self._payload_tx_rx, self._buffer_index) = self.get_rx_buffer_status()
 
-        # register onReceive function to call every receive done
-        self._onReceive = callback
+        if callable(self._on_receive):
+            self._on_receive()
+
+    def on_transmit(self, callback):
+        self._on_transmit = callback
+
+    def on_receive(self, callback):
+        self._on_receive = callback

@@ -1,223 +1,287 @@
-from base import BaseLoRa
-import spidev
-import RPi.GPIO
 import time
+
 from sx1262_constants import *
 
+
 class SX1262Modem:
-### MODEM, MODULATION PARAMETER, AND PACKET PARAMETER SETUP METHODS ###
+    # MODEM, MODULATION PARAMETER, AND PACKET PARAMETER SETUP METHODS
 
-    def setModem(self, modem) :
-
+    def set_modem(self, modem):
         self._modem = modem
-        self.setStandby(STANDBY_RC)
-        self.setPacketType(modem)
+        self.set_standby(STANDBY_RC)
+        self.set_packet_type(modem)
 
-    def setFrequency(self, frequency: int) :
-
+    def set_frequency(self, frequency: int):
         # perform image calibration before set frequency
-        if frequency < 446000000 :
-            calFreqMin = CAL_IMG_430
-            calFreqMax = CAL_IMG_440
-        elif frequency < 734000000 :
-            calFreqMin = CAL_IMG_470
-            calFreqMax = CAL_IMG_510
-        elif frequency < 828000000 :
-            calFreqMin = CAL_IMG_779
-            calFreqMax = CAL_IMG_787
-        elif frequency < 877000000 :
-            calFreqMin = CAL_IMG_863
-            calFreqMax = CAL_IMG_870
-        else :
-            calFreqMin = CAL_IMG_902
-            calFreqMax = CAL_IMG_928
-        self.calibrateImage(calFreqMin, calFreqMax)
+        if frequency < 446000000:
+            cal_freq_min = CAL_IMG_430
+            cal_freq_max = CAL_IMG_440
+        elif frequency < 734000000:
+            cal_freq_min = CAL_IMG_470
+            cal_freq_max = CAL_IMG_510
+        elif frequency < 828000000:
+            cal_freq_min = CAL_IMG_779
+            cal_freq_max = CAL_IMG_787
+        elif frequency < 877000000:
+            cal_freq_min = CAL_IMG_863
+            cal_freq_max = CAL_IMG_870
+        else:
+            cal_freq_min = CAL_IMG_902
+            cal_freq_max = CAL_IMG_928
+
+        self.calibrate_image(cal_freq_min, cal_freq_max)
 
         # calculate frequency and set frequency setting
-        rfFreq = int(frequency * 33554432 / 32000000)
-        self.setRfFrequency(rfFreq)
+        rf_freq = int(frequency * RF_FREQUENCY_NOM / RF_FREQUENCY_XTAL)
+        self.set_rf_frequency(rf_freq)
 
-    def setTxPower(self, txPower: int, version = TX_POWER_SX1262) :
+    def set_tx_power(self, tx_power: int, version=TX_POWER_SX1262):
+        # maximum TX power is 22 dBm and 15 dBm for SX1261
+        if tx_power > 22:
+            tx_power = 22
+        elif tx_power > 15 and version == TX_POWER_SX1261:
+            tx_power = 15
 
-        #  maximum TX power is 22 dBm and 15 dBm for SX1261
-        if txPower > 22 : txPower = 22
-        elif txPower > 15 and version == TX_POWER_SX1261 : txPower = 15
-
-        paDutyCycle = 0x00
-        hpMax = 0x00
-        deviceSel = 0x00
+        pa_duty_cycle = 0x00
+        hp_max = 0x00
+        device_sel = 0x00
         power = 0x0E
-        if version == TX_POWER_SX1261 : deviceSel = 0x01
-        # set parameters for PA config and TX params configuration
-        if txPower == 22 :
-            paDutyCycle = 0x04
-            hpMax = 0x07
+
+        if version == TX_POWER_SX1261:
+            device_sel = 0x01
+
+        if tx_power == 22:
+            pa_duty_cycle = 0x04
+            hp_max = 0x07
             power = 0x16
-        elif txPower >= 20 :
-            paDutyCycle = 0x03
-            hpMax = 0x05
+        elif tx_power >= 20:
+            pa_duty_cycle = 0x03
+            hp_max = 0x05
             power = 0x16
-        elif txPower >= 17 :
-            paDutyCycle = 0x02
-            hpMax = 0x03
+        elif tx_power >= 17:
+            pa_duty_cycle = 0x02
+            hp_max = 0x03
             power = 0x16
-        elif txPower >= 14 and version == TX_POWER_SX1261 :
-            paDutyCycle = 0x04
-            hpMax = 0x00
+        elif tx_power >= 14 and version == TX_POWER_SX1261:
+            pa_duty_cycle = 0x04
+            hp_max = 0x00
             power = 0x0E
-        elif txPower >= 14 and version == TX_POWER_SX1262 :
-            paDutyCycle = 0x02
-            hpMax = 0x02
+        elif tx_power >= 14 and version == TX_POWER_SX1262:
+            pa_duty_cycle = 0x02
+            hp_max = 0x02
             power = 0x16
-        elif txPower >= 14 and version == TX_POWER_SX1268 :
-            paDutyCycle = 0x04
-            hpMax = 0x06
+        elif tx_power >= 14 and version == TX_POWER_SX1268:
+            pa_duty_cycle = 0x04
+            hp_max = 0x06
             power = 0x0F
-        elif txPower >= 10 and version == TX_POWER_SX1261 :
-            paDutyCycle = 0x01
-            hpMax = 0x00
+        elif tx_power >= 10 and version == TX_POWER_SX1261:
+            pa_duty_cycle = 0x01
+            hp_max = 0x00
             power = 0x0D
-        elif txPower >= 10 and version == TX_POWER_SX1268 :
-            paDutyCycle = 0x00
-            hpMax = 0x03
+        elif tx_power >= 10 and version == TX_POWER_SX1268:
+            pa_duty_cycle = 0x00
+            hp_max = 0x03
             power = 0x0F
-        else : return
+        else:
+            return
 
-        # set power amplifier and TX power configuration
-        self.setPaConfig(paDutyCycle, hpMax, deviceSel, 0x01)
-        self.setTxParams(power, PA_RAMP_800U)
+        self.set_pa_config(pa_duty_cycle, hp_max, device_sel, 0x01)
+        self.set_tx_params(power, PA_RAMP_800U)
 
-    def setRxGain(self, rxGain) :
-
-        # set power saving or boosted gain in register
+    def set_rx_gain(self, rx_gain):
         gain = POWER_SAVING_GAIN
-        if rxGain == RX_GAIN_BOOSTED :
+        if rx_gain == RX_GAIN_BOOSTED:
             gain = BOOSTED_GAIN
-            # set certain register to retain configuration after wake from sleep mode
-            self.writeRegister(REG_RX_GAIN, (gain,), 1)
-            self.writeRegister(0x029F, (0x01, 0x08, 0xAC), 3)
-        else :
-            self.writeRegister(REG_RX_GAIN, (gain,), 1)
+            self.write_register(REG_RX_GAIN, (gain,), 1)
+            self.write_register(0x029F, (0x01, 0x08, 0xAC), 3)
+        else:
+            self.write_register(REG_RX_GAIN, (gain,), 1)
 
-    def setLoRaModulation(self, sf: int, bw: int, cr: int, ldro: bool = False) :
-
+    def set_lora_modulation(self, sf: int, bw: int, cr: int, ldro: bool = False):
         self._sf = sf
         self._bw = bw
         self._cr = cr
         self._ldro = ldro
 
-        # valid spreading factor is between 5 and 12
-        if sf > 12 : sf = 12
-        elif sf < 5 : sf = 5
-        # select bandwidth options
-        if bw < 9100 : bw = BW_7800
-        elif bw < 13000 : bw = BW_10400
-        elif bw < 18200 : bw = BW_15600
-        elif bw < 26000 : bw = BW_20800
-        elif bw < 36500 : bw = BW_31250
-        elif bw < 52100 : bw = BW_41700
-        elif bw < 93800 : bw = BW_62500
-        elif bw < 187500 : bw = BW_125000
-        elif bw < 375000 : bw = BW_250000
-        else : bw = BW_500000
-        # valid code rate denominator is between 4 and 8
+        if sf > 12:
+            sf = 12
+        elif sf < 5:
+            sf = 5
+
+        if bw < 9100:
+            bw = BW_7800
+        elif bw < 13000:
+            bw = BW_10400
+        elif bw < 18200:
+            bw = BW_15600
+        elif bw < 26000:
+            bw = BW_20800
+        elif bw < 36500:
+            bw = BW_31250
+        elif bw < 52100:
+            bw = BW_41700
+        elif bw < 93800:
+            bw = BW_62500
+        elif bw < 187500:
+            bw = BW_125000
+        elif bw < 375000:
+            bw = BW_250000
+        else:
+            bw = BW_500000
+
         cr = cr - 4
-        if cr > 4 : cr = 0
-        # set low data rate option
-        if ldro : ldro = LDRO_ON
-        else : ldro = LDRO_OFF
+        if cr > 4:
+            cr = 0
 
-        self.setModulationParamsLoRa(sf, bw, cr, ldro)
+        if ldro:
+            ldro = LDRO_ON
+        else:
+            ldro = LDRO_OFF
 
-    def setLoRaPacket(self, headerType, preambleLength: int, payloadLength: int, crcType: bool = False, invertIq: bool = False) :
+        self.set_modulation_params_lora(sf, bw, cr, ldro)
 
-        self._headerType = headerType
-        self._preambleLength = preambleLength
-        self._payloadLength = payloadLength
-        self._crcType = crcType
-        self._invertIq = invertIq
+    def set_lora_packet(
+        self,
+        header_type,
+        preamble_length: int,
+        payload_length: int,
+        crc_type: bool = False,
+        invert_iq: bool = False,
+    ):
+        self._header_type = header_type
+        self._preamble_length = preamble_length
+        self._payload_length = payload_length
+        self._crc_type = crc_type
+        self._invert_iq = invert_iq
 
-        # filter valid header type config
-        if headerType != HEADER_IMPLICIT : headerType = HEADER_EXPLICIT
-        # set CRC and invert IQ option
-        if crcType : crcType = CRC_ON
-        else : crcType = CRC_OFF
-        if invertIq : invertIq = IQ_INVERTED
-        else : invertIq = IQ_STANDARD
+        if header_type != HEADER_IMPLICIT:
+            header_type = HEADER_EXPLICIT
 
-        self.setPacketParamsLoRa(preambleLength, headerType, payloadLength, crcType, invertIq)
-        self._fixInvertedIq(invertIq)
+        if crc_type:
+            crc_type_val = CRC_ON
+        else:
+            crc_type_val = CRC_OFF
 
-    def setSpreadingFactor(self, sf: int) :
+        if invert_iq:
+            invert_iq_val = IQ_INVERTED
+        else:
+            invert_iq_val = IQ_STANDARD
 
-        self.setLoRaModulation(sf, self._bw, self._cr, self._ldro)
-
-    def setBandwidth(self, bw: int) :
-
-        self.setLoRaModulation(self._sf, bw, self._cr, self._ldro)
-
-    def setCodeRate(self, cr: int) :
-
-        self.setLoRaModulation(self._sf, self._bw, cr, self._ldro)
-
-    def setLdroEnable(self, ldro: bool = True) :
-
-        self.setLoRaModulation(self._sf, self._bw, self._cr, ldro)
-
-    def setHeaderType(self, headerType) :
-
-        self.setLoRaPacket(self._preambleLength, headerType, self._payloadLength, self._crcType, self._invertIq)
-
-    def setPreambleLength(self, preambleLength: int) :
-
-        self.setLoRaPacket(preambleLength, self._headerType, self._payloadLength, self._crcType, self._invertIq)
-
-    def setPayloadLength(self, payloadLength: int) :
-
-        self.setLoRaPacket(self._preambleLength, self._headerType, payloadLength, self._crcType, self._invertIq)
-
-    def setCrcEnable(self, crcType: bool = True) :
-
-        self.setLoRaPacket(self._preambleLength, self._headerType, self._payloadLength, crcType, self._invertIq)
-
-    def setInvertIq(self, invertIq: bool = True) :
-
-        self.setLoRaPacket(self._preambleLength, self._headerType, self._payloadLength, self._crcType, invertIq)
-
-    def setSyncWord(self, syncWord: int) :
-
-        buf = (
-            (syncWord >> 8) & 0xFF,
-            syncWord & 0xFF
+        self.set_packet_params_lora(
+            preamble_length, header_type, payload_length, crc_type_val, invert_iq_val
         )
-        if syncWord <= 0xFF :
+        self._fix_inverted_iq(invert_iq_val)
+
+    def set_spreading_factor(self, sf: int):
+        self.set_lora_modulation(sf, self._bw, self._cr, self._ldro)
+
+    def set_bandwidth(self, bw: int):
+        self.set_lora_modulation(self._sf, bw, self._cr, self._ldro)
+
+    def set_code_rate(self, cr: int):
+        self.set_lora_modulation(self._sf, self._bw, cr, self._ldro)
+
+    def set_ldro_enable(self, ldro: bool = True):
+        self.set_lora_modulation(self._sf, self._bw, self._cr, ldro)
+
+    def set_header_type(self, header_type):
+        self.set_lora_packet(
+            header_type,
+            self._preamble_length,
+            self._payload_length,
+            self._crc_type,
+            self._invert_iq,
+        )
+
+    def set_preamble_length(self, preamble_length: int):
+        self.set_lora_packet(
+            self._header_type,
+            preamble_length,
+            self._payload_length,
+            self._crc_type,
+            self._invert_iq,
+        )
+
+    def set_payload_length(self, payload_length: int):
+        self.set_lora_packet(
+            self._header_type,
+            self._preamble_length,
+            payload_length,
+            self._crc_type,
+            self._invert_iq,
+        )
+
+    def set_crc_enable(self, crc_type: bool = True):
+        self.set_lora_packet(
+            self._header_type,
+            self._preamble_length,
+            self._payload_length,
+            crc_type,
+            self._invert_iq,
+        )
+
+    def set_invert_iq(self, invert_iq: bool = True):
+        self.set_lora_packet(
+            self._header_type,
+            self._preamble_length,
+            self._payload_length,
+            self._crc_type,
+            invert_iq,
+        )
+
+    def set_sync_word(self, sync_word: int):
+        buf = (
+            (sync_word >> 8) & 0xFF,
+            sync_word & 0xFF,
+        )
+        if sync_word <= 0xFF:
             buf = (
-                (syncWord & 0xF0) | 0x04,
-                (syncWord << 4) | 0x04
+                (sync_word & 0xF0) | 0x04,
+                (sync_word << 4) | 0x04,
             )
-        self.writeRegister(REG_LORA_SYNC_WORD_MSB, buf, 2)
+        self.write_register(REG_LORA_SYNC_WORD_MSB, buf, 2)
 
-    def setFskModulation(self, br: int, pulseShape: int, bandwidth: int, fdev: int) :
+    def set_fsk_modulation(self, br: int, pulse_shape: int, bandwidth: int, fdev: int):
+        self.set_modulation_params_fsk(br, pulse_shape, bandwidth, fdev)
 
-        self.setModulationParamsFsk(br, pulseShape, bandwidth, fdev)
+    def set_fsk_packet(
+        self,
+        preamble_length: int,
+        preamble_detector: int,
+        sync_word_length: int,
+        addr_comp: int,
+        packet_type: int,
+        payload_length: int,
+        crc_type: int,
+        whitening: int,
+    ):
+        self.set_packet_params_fsk(
+            preamble_length,
+            preamble_detector,
+            sync_word_length,
+            addr_comp,
+            packet_type,
+            payload_length,
+            crc_type,
+            whitening,
+        )
 
-    def setFskPacket(self, preambleLength: int, preambleDetector: int, syncWordLength: int, addrComp: int, packetType: int, payloadLength: int, crcType: int, whitening: int) :
+    def set_fsk_sync_word(self, sw: tuple, sw_len: int):
+        self.write_register(REG_FSK_SYNC_WORD_0, sw, sw_len)
 
-        self.setPacketParamsFsk(preambleLength, preambleDetector, syncWordLength, addrComp, packetType, payloadLength, crcType, whitening)
+    def set_fsk_address(self, node_addr: int, broadcast_addr: int):
+        self.write_register(REG_FSK_NODE_ADDRESS, (node_addr, broadcast_addr), 2)
 
-    def setFskSyncWord(self, sw: tuple, swLen: int) :
+    def set_fsk_crc(self, crc_init: int, crc_polynom: int):
+        buf = (
+            crc_init >> 8,
+            crc_init & 0xFF,
+            crc_polynom >> 8,
+            crc_polynom & 0xFF,
+        )
+        self.write_register(REG_FSK_CRC_INITIAL_MSB, buf, 4)
 
-        self.writeRegister(REG_FSK_SYNC_WORD_0, sw, swLen)
-
-    def setFskAddress(self, nodeAddr: int, broadcastAddr: int) :
-
-        self.writeRegister(REG_FSK_NODE_ADDRESS, (nodeAddr, broadcastAddr), 2)
-
-    def setFskCrc(self, crcInit: int, crcPolynom: int) :
-
-        buf = (crcInit >> 8, crcInit & 0xFF, crcPolynom >> 8, crcPolynom & 0xFF)
-        self.writeRegister(REG_FSK_CRC_INITIAL_MSB, buf, 4)
-
-    def setFskWhitening(self, whitening: int) :
-
-        self.writeRegister(REG_FSK_WHITENING_INITIAL_MSB, (whitening >> 8, whitening & 0xFF), 2)
+    def set_fsk_whitening(self, whitening: int):
+        self.write_register(
+            REG_FSK_WHITENING_INITIAL_MSB, (whitening >> 8, whitening & 0xFF), 2
+        )
