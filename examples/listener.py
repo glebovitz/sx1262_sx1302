@@ -64,7 +64,7 @@ def main():
     global radio
 
     print("Initializing SX1262…")
-    radio = SX126x()
+    radio = SX1262()
 
     ok = radio.begin(
         bus=SPI_BUS,
