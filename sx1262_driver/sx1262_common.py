@@ -123,6 +123,7 @@ class SX1262Common:
                 if irq:
                     # Let SX1262Interrupt decode and emit events
                     self._handle_irq(irq)
+                    print(f"after Handle_irq: status is {hex(self.get_mode_and_control())}")
                 time.sleep(self._recv_interval)
 
         self._recv_thread = threading.Thread(target=loop, daemon=True)
