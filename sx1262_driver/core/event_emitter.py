@@ -8,8 +8,6 @@ from typing import Callable, Dict, List
 class EventEmitter:
     def __init__(self):
         super().__init__()
-class EventEmitter:
-    def __init__(self):
         self._loop = None
         self._loop_thread_id = None
         self._event_listeners = defaultdict(list)
