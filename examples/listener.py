@@ -139,7 +139,7 @@ async def main():
     radio.attach_loop(asyncio.get_running_loop())
 
     # Start radio (creates recv thread)
-    await radio.start()
+    # await radio.start()
 
     # NOW safe to request RX
     ok = radio.request(RX_CONTINUOUS)
