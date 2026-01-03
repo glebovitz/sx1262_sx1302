@@ -3,8 +3,9 @@ import lgpio
 
 from .sx1262_constants import *
 
-
 class SX1262Receive:
+    def __init__(self):
+        super().__init__()
     # ---------------------------------------------------------------------
     # RECEIVE REQUESTS
     # ---------------------------------------------------------------------

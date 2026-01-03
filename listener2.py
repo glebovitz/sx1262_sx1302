@@ -73,7 +73,7 @@ def start_irq_polling(driver, interval=0.01):
 def on_rx():
     status = radio.status()
 
-    if (status == STATUS_RX_DONE)
+    if (status == STATUS_RX_DONE):
         handle_rx_done(payload_length=radio.available(), buffer_index=None, irq_status=None)
     elif status == STATUS_CRC_ERR:
         handle_crc_error(irq_status=None)
@@ -140,9 +140,6 @@ def main():
 
     # Optional: background RSSI monitor
     # start_background_rssi(radio, interval=5)
-
-    # Poll IRQ status in a background thread instead of GPIO edge callbacks
-    start_irq_polling(radio)
 
     # Sync word (public network)
     radio.set_sync_word(LORA_SYNC_WORD_PUBLIC)

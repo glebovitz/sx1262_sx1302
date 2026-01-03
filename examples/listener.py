@@ -67,6 +67,7 @@ async def handle_rx_done(payload_length=None, buffer_index=None, irq_status=None
     print("\n--- PACKET RECEIVED ---")
     print(f"Bytes: {payload_length}")
     print(f"Data:  {data.hex(' ')}")
+    print(f"IRQ:   {irq_status}")
     print(f"RSSI:  {rssi:.1f} dBm")
     print(f"SNR:   {snr:.1f} dB")
     print("------------------------")
@@ -136,17 +137,17 @@ async def main():
     print("Waiting for packets…")
 
     # IMPORTANT: Attach loop BEFORE starting radio threads
-    radio.events.attach_loop(asyncio.get_running_loop())
+    radio.attach_loop(asyncio.get_running_loop())
 
     # Start radio (creates recv thread)
-    await radio.start()
+    # await radio.start()
 
     # NOW safe to request RX
     ok = radio.request(RX_CONTINUOUS)
     if not ok:
         raise RuntimeError("Failed to enter RX_CONTINUOUS mode.")
-
-    print(f"sync word is {hex(radio.get_sync_word())}")
+    print(f"Radio status is {hex(radio.get_mode_and_control())}")
+    # print(f"sync word is {hex(radio.get_sync_word())}")
 
     # Sleep forever
     try:

@@ -3,8 +3,10 @@ import lgpio
 
 from .sx1262_constants import *
 
-
 class SX1262Transmit:
+    def __init__(self):
+        super().__init__()
+
     # ---------------------------------------------------------------------
     # TRANSMIT RELATED METHODS
     # ---------------------------------------------------------------------

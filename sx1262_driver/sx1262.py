@@ -4,7 +4,6 @@ import lgpio
 import time
 
 from .core.event_emitter import EventEmitter
-
 from .base import BaseLoRa
 from .sx1262_vars import SX1262Vars
 from .sx1262_api import SX1262Api
@@ -31,14 +30,10 @@ class SX1262(
     BaseLoRa,
 ):
     def __init__(self):
-        # Initialize EventEmitter first so it's ready before we emit anything
-        EventEmitter.__init__(self)
-        # Initialize all mixins / BaseLoRa as before
         super().__init__()
 
         self.spi = spidev.SpiDev()
 
         # lgpio: open /dev/gpiochip0 explicitly and keep a handle
         self.gpio_chip = lgpio.gpiochip_open(0)
-        self._recv_thread = None
-        self._recv_running = False
+        

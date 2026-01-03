@@ -1,6 +1,7 @@
 import time
 
-from .sx1262_constants import *
+from sx1262_constants import *
+
 
 class SX1262Interrupt:
     def __init__(self):
@@ -65,7 +66,6 @@ class SX1262Interrupt:
         # Cache IRQ status and RX buffer status
         self._status_irq = self.get_irq_status()
         (self._payload_tx_rx, self._buffer_index) = self.get_rx_buffer_status()
-        print("got rx_done, buffer status payload lenght is {self._payload_tx_rx} buffer offset is {self._buffer_index}")
 
         # EventEmitter: notify listeners of RX completion
         self.emit(
